@@ -32,3 +32,7 @@
 - [x] Teste de login com credenciais incorretas
 - [x] Teste de criação de usuário (admin)
 - [x] Teste de acesso negado para não-admin
+
+## Correções
+- [x] Bug: login não respondia — corrigido leitura de cookies via req.headers.cookie (sem cookie-parser)
+- [x] Bug: interceptador de OAuth redirecionava erros do hub para login Manus — isolado por mensagem exata

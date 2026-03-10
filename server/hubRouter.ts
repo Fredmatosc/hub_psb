@@ -1,7 +1,9 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { SignJWT, jwtVerify } from "jose";
-import { router, publicProcedure, protectedProcedure } from "./_core/trpc";
+import { parse as parseCookies } from "cookie";
+import { router, publicProcedure } from "./_core/trpc";
+import { getSessionCookieOptions } from "./_core/cookies";
 import {
   getHubUserByUsername,
   getHubUserById,
@@ -36,20 +38,17 @@ async function verifyHubToken(token: string): Promise<{ userId: number; role: st
   }
 }
 
-function getHubCookieOptions(req: { protocol?: string; headers?: Record<string, unknown> }) {
-  const isSecure = req.protocol === "https" || String(req.headers?.["x-forwarded-proto"]) === "https";
-  return {
-    httpOnly: true,
-    secure: isSecure,
-    sameSite: isSecure ? ("none" as const) : ("lax" as const),
-    path: "/",
-    maxAge: SESSION_DURATION,
-  };
+// Parse cookies from the raw HTTP header (Express doesn't use cookie-parser)
+function parseCookieHeader(req: { headers?: Record<string, unknown> | { cookie?: string } }): Record<string, string> {
+  const cookieHeader = (req.headers as Record<string, unknown>)?.["cookie"];
+  if (!cookieHeader || typeof cookieHeader !== "string") return {};
+  return parseCookies(cookieHeader);
 }
 
 // Middleware: extract hub user from cookie
-async function getHubUserFromCookie(req: { cookies?: Record<string, string> }) {
-  const token = req.cookies?.[HUB_COOKIE];
+async function getHubUserFromCookie(req: { headers?: Record<string, unknown> | { cookie?: string }; cookies?: Record<string, string> }) {
+  const cookies = parseCookieHeader(req);
+  const token = cookies[HUB_COOKIE] ?? req.cookies?.[HUB_COOKIE];
   if (!token) return null;
   const payload = await verifyHubToken(token);
   if (!payload) return null;
@@ -87,7 +86,7 @@ export const hubRouter = router({
       }
       await updateLastSignedIn(user.id);
       const token = await signHubToken(user.id, user.role);
-      const cookieOptions = getHubCookieOptions(ctx.req);
+      const cookieOptions = { ...getSessionCookieOptions(ctx.req as Parameters<typeof getSessionCookieOptions>[0]), maxAge: SESSION_DURATION };
       ctx.res.cookie(HUB_COOKIE, token, cookieOptions);
       return {
         id: user.id,
@@ -98,7 +97,7 @@ export const hubRouter = router({
     }),
 
   logout: publicProcedure.mutation(({ ctx }) => {
-    const cookieOptions = getHubCookieOptions(ctx.req);
+    const cookieOptions = getSessionCookieOptions(ctx.req as Parameters<typeof getSessionCookieOptions>[0]);
     ctx.res.clearCookie(HUB_COOKIE, { ...cookieOptions, maxAge: -1 });
     return { success: true };
   }),

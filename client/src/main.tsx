@@ -14,9 +14,10 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!(error instanceof TRPCClientError)) return;
   if (typeof window === "undefined") return;
 
-  const isUnauthorized = error.message === UNAUTHED_ERR_MSG;
-
-  if (!isUnauthorized) return;
+  // Only redirect to Manus OAuth for the specific Manus auth error message
+  // Hub PSB uses its own auth — never redirect hub errors to OAuth
+  const isManusUnauthorized = error.message === UNAUTHED_ERR_MSG;
+  if (!isManusUnauthorized) return;
 
   window.location.href = getLoginUrl();
 };
